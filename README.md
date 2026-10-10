@@ -5,14 +5,15 @@ Photograph a receipt, and an AI vision model extracts the store, date, items, pr
 Items are categorised automatically, and a dashboard shows spending by category, store and month,
 plus price trends and forecasts.
 
-> Status: receipt scanning works (upload → AI extraction → review → save). The spending dashboard comes in a later step.
+> Status: receipt scanning (upload → AI extraction → review → save) and the analytics dashboard work.
+> Budgets, forecasts and alerts come in a later step.
 
 ## Stack
 
 | Part                       | Tech                                                 |
 | -------------------------- | ---------------------------------------------------- |
 | Backend                    | FastAPI (Python 3.11+) in `backend/`                 |
-| Frontend                   | React + Vite + Tailwind CSS + React Router in `frontend/` |
+| Frontend                   | React + Vite + Tailwind CSS + React Router + Recharts in `frontend/` |
 | Database, auth, storage    | Supabase (schema in `supabase/schema.sql`)           |
 | Receipt AI                 | Google Gemini Flash (`google-genai`, structured JSON output) |
 | Hosting                    | Vercel (frontend), Render (backend)                  |
@@ -97,6 +98,27 @@ npm run dev
 | GET    | `/api/receipts`   | ✅   | your receipts, newest first, with item count |
 | GET    | `/api/receipts/{id}` | ✅ | one receipt with items and a 10-minute image link |
 | DELETE | `/api/receipts/{id}` | ✅ | delete a receipt, its items and its photo |
+| GET    | `/api/analytics/summary?month=YYYY-MM` | ✅ | total, % vs previous month, receipts, average, top store, biggest category |
+| GET    | `/api/analytics/by-category?month=YYYY-MM` | ✅ | spending per category (amount, %) |
+| GET    | `/api/analytics/by-store?month=YYYY-MM` | ✅ | spending and visits per store |
+| GET    | `/api/analytics/monthly-trend?months=12` | ✅ | total per month, empty months included |
+| GET    | `/api/analytics/top-items?month=YYYY-MM&limit=10` | ✅ | top items by spend and by count |
+| GET    | `/api/analytics/price-history?item=milch` | ✅ | an item's price over time per store |
+
+## How the dashboard numbers are calculated
+
+The maths is in `backend/app/analytics.py` (plain Python, so it runs anywhere; pandas was
+dropped because Windows Smart App Control blocks its native files on the dev machine).
+
+- **Total, store and trend numbers** use the receipt totals (what you actually paid).
+- **Category and item numbers** use item prices. They can differ from the totals by a few cents.
+- **Discounts and returned deposit** are negative items and reduce their category; categories
+  that end up at 0 or below are hidden, and percentages are of the remaining categories.
+- **Top items** leave out discounts and bottle deposit. Similar names are grouped
+  ("H-Milch 3,5% 1L" and "H-MILCH 3,5%" → "h milch"). "Bought" counts receipt lines.
+- **Price tracker** matches whole words ("milch" finds "H-Milch" but not "Vollmilch") and uses the
+  price per unit (or per kg). The matched item names are listed under the chart.
+- **Store names** are grouped ignoring upper/lower case and extra spaces ("REWE" = "Rewe").
 
 ## How receipt scanning works
 

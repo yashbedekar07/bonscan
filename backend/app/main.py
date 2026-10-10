@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from supabase import Client
 
 from app import receipts
+from app.routers import analytics
 from app.auth import CurrentUser, get_current_user, get_user_db
 from app.categories import fetch_categories
 from app.config import FRONTEND_ORIGINS, ConfigError, gemini_configured, supabase_configured
@@ -33,8 +34,9 @@ def config_error_handler(_request: Request, error: ConfigError) -> JSONResponse:
     return JSONResponse(status_code=503, content={"detail": str(error)})
 
 
-# Receipt endpoints live in app/receipts.py.
+# Receipt endpoints live in app/receipts.py, dashboard numbers in app/routers/analytics.py.
 app.include_router(receipts.router)
+app.include_router(analytics.router)
 
 
 class HealthResponse(BaseModel):
