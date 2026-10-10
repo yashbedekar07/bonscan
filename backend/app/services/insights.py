@@ -19,7 +19,7 @@ behind it, so the user can check the maths.
 from collections import defaultdict
 from datetime import date, timedelta
 
-from app.analytics import normalize_item_name, store_key
+from app.analytics import DEPOSIT_CATEGORY, normalize_item_name, store_key
 
 SPIKE_RATIO = 1.30  # more than 30 % above average
 SPIKE_MIN_EUR = 10.0  # ... and at least 10 € more
@@ -126,12 +126,16 @@ def price_increases(items: list[dict], today: date) -> list[dict]:
 
     items: receipt item rows with name, quantity, unit_price, total_price and
     receipts {store_name, purchase_date}. Several purchases on one day are averaged.
+    Bottle deposit lines are skipped: "Pfand" isn't a product, its amount just
+    depends on how many bottles you bought.
     """
     # (item key, store key) → {date: [prices]}
     history: dict[tuple[str, str], dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     labels: dict[tuple[str, str], tuple[str, str]] = {}
 
     for item in items:
+        if (item.get("categories") or {}).get("name") == DEPOSIT_CATEGORY:
+            continue
         price = _unit_price(item)
         key_name = normalize_item_name(item["name"])
         if price is None or not key_name:

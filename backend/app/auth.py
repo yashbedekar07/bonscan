@@ -8,7 +8,7 @@ Usage:
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from supabase import Client
 
 from app.config import ConfigError
@@ -24,7 +24,9 @@ class CurrentUser(BaseModel):
 
     id: str
     email: str | None
-    access_token: str  # used to talk to Supabase on the user's behalf; never logged
+    # Used to talk to Supabase on the user's behalf. Hidden from repr() and
+    # model_dump(), so it can't end up in logs, error messages or responses.
+    access_token: str = Field(repr=False, exclude=True)
 
 
 def _unauthorized(detail: str) -> HTTPException:

@@ -1,7 +1,8 @@
+import { API_URL } from "./config";
 import { supabase } from "./supabase";
+import { ensureServerAwake, markServerAwake, markServerUnreachable } from "./serverWake";
 
-// Base URL of the FastAPI backend.
-export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+export { API_URL };
 
 /** Turn a FastAPI error body into one readable sentence. */
 function errorMessage(body, status) {
@@ -19,9 +20,14 @@ function errorMessage(body, status) {
 /**
  * Call the backend as the logged-in user.
  * Sends the Supabase access token as "Authorization: Bearer <token>".
+ * Waits for a sleeping server to wake up first (see serverWake.js).
  * Throws an Error with a user-friendly message if the request fails.
  */
-async function request(path, { method = "GET", json, formData, asBlob = false } = {}) {
+async function request(path, options = {}, isRetry = false) {
+  const { method = "GET", json, formData, asBlob = false } = options;
+
+  await ensureServerAwake();
+
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -41,8 +47,13 @@ async function request(path, { method = "GET", json, formData, asBlob = false } 
   try {
     res = await fetch(`${API_URL}${path}`, { method, headers, body });
   } catch {
-    throw new Error("Can't reach the server. Is the backend running?");
+    markServerUnreachable();
+    // Reading data is safe to repeat: wait for the server, then try once more.
+    // Writes (uploads, saves) are not repeated automatically, to avoid duplicates.
+    if (method === "GET" && !isRetry) return request(path, options, true);
+    throw new Error("Can't reach the server. Please check your connection and try again.");
   }
+  markServerAwake();
 
   if (!res.ok) {
     let errorBody = null;

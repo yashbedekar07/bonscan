@@ -178,3 +178,75 @@ create policy "Users delete receipts in their own folder"
         bucket_id = 'receipts'
         and (storage.foldername(name))[1] = (select auth.uid())::text
     );
+
+
+-- ---------------------------------------------------------------------
+-- 7. Daily scan limit (fair use of the Gemini quota)
+--    One row per user per day with the number of AI scans.
+--    Users may READ their own count but never change it directly; the only
+--    way to count up is register_scan(), which checks the limit and adds 1
+--    in a single locked step (two scans at once can't both slip through).
+-- ---------------------------------------------------------------------
+
+create table if not exists public.scan_usage (
+    user_id  uuid not null references auth.users (id) on delete cascade,
+    day      date not null,
+    scans    integer not null default 0 check (scans >= 0),
+    primary key (user_id, day)
+);
+
+alter table public.scan_usage enable row level security;
+revoke all on public.scan_usage from anon, authenticated;
+grant select on public.scan_usage to authenticated;
+
+drop policy if exists "Users read their own scan usage" on public.scan_usage;
+create policy "Users read their own scan usage"
+    on public.scan_usage for select
+    to authenticated
+    using (user_id = (select auth.uid()));
+
+-- Count one scan for the calling user if they're under daily_limit.
+-- Returns allowed = false (and doesn't count) when the limit is reached.
+-- "security definer" lets it write the table that users can't write directly;
+-- it only ever touches the row of auth.uid(), so users can't affect each other.
+create or replace function public.register_scan(daily_limit integer)
+returns table (allowed boolean, used integer)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+    uid uuid := auth.uid();
+    today date := (now() at time zone 'Europe/Berlin')::date;
+    current_scans integer;
+begin
+    if uid is null then
+        raise exception 'Not authenticated';
+    end if;
+
+    insert into public.scan_usage (user_id, day, scans)
+    values (uid, today, 0)
+    on conflict (user_id, day) do nothing;
+
+    -- Lock the row so parallel scans are counted one after another.
+    select s.scans into current_scans
+    from public.scan_usage s
+    where s.user_id = uid and s.day = today
+    for update;
+
+    if current_scans >= daily_limit then
+        return query select false, current_scans;
+        return;
+    end if;
+
+    update public.scan_usage s
+    set scans = s.scans + 1
+    where s.user_id = uid and s.day = today
+    returning s.scans into current_scans;
+
+    return query select true, current_scans;
+end;
+$$;
+
+revoke execute on function public.register_scan(integer) from public, anon;
+grant execute on function public.register_scan(integer) to authenticated;

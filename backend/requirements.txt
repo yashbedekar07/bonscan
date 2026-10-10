@@ -1,7 +1,8 @@
-fastapi>=0.115
-uvicorn[standard]>=0.30
-python-dotenv>=1.0
-python-multipart>=0.0.20
-supabase>=2.32
-google-genai>=2.29
-pillow>=12.0
+# Exact versions, so Render installs the same packages that were tested locally.
+fastapi==0.143.0
+uvicorn[standard]==0.54.0
+python-dotenv==1.2.4
+python-multipart==0.0.32
+supabase==2.32.0
+google-genai==2.29.0
+pillow==12.3.0

@@ -1,23 +1,19 @@
 import { useEffect, useState } from "react";
-import { API_URL } from "../lib/api";
+import { ensureServerAwake } from "../lib/serverWake";
 
 /**
  * Small indicator that pings /api/health: shows whether the backend is up
- * and whether its .env is complete.
+ * (waiting for it to wake up if needed) and whether its settings are complete.
  */
 function ApiStatus() {
   const [health, setHealth] = useState(null); // response of /api/health
   const [status, setStatus] = useState("loading"); // "loading" | "ok" | "error"
 
   useEffect(() => {
-    fetch(`${API_URL}/api/health`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
+    ensureServerAwake({ force: true })
       .then((data) => {
         setHealth(data);
-        setStatus(data.status === "ok" ? "ok" : "error");
+        setStatus(data?.status === "ok" ? "ok" : "error");
       })
       .catch(() => setStatus("error"));
   }, []);
@@ -26,7 +22,7 @@ function ApiStatus() {
     return <span className="text-slate-400">Checking API…</span>;
   }
   if (status === "error") {
-    return <span className="text-red-600">API not reachable ❌ (is the backend running on {API_URL}?)</span>;
+    return <span className="text-red-600">API not reachable ❌ Please try again in a minute.</span>;
   }
 
   const missing = [
@@ -37,7 +33,7 @@ function ApiStatus() {
   if (missing.length > 0) {
     return (
       <span className="text-amber-700">
-        API connected ⚠️ backend/.env is missing: {missing.join(", ")}
+        API connected ⚠️ server settings missing: {missing.join(", ")}
       </span>
     );
   }

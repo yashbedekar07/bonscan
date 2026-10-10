@@ -6,7 +6,7 @@ function SetupRequired({ missing }) {
         <h1 className="text-2xl font-bold text-emerald-600">BonScan</h1>
         <h2 className="mt-4 text-lg font-semibold text-slate-800">Setup needed</h2>
         <p className="mt-2 text-slate-600">
-          These settings are missing from <code className="rounded bg-slate-100 px-1">frontend/.env</code>:
+          These settings are missing:
         </p>
         <ul className="mt-3 list-disc pl-6 font-mono text-sm text-slate-800">
           {missing.map((name) => (
@@ -14,8 +14,11 @@ function SetupRequired({ missing }) {
           ))}
         </ul>
         <p className="mt-4 text-sm text-slate-600">
-          Copy the values from Supabase → Project Settings → API Keys, then restart{" "}
+          Locally: add them to <code className="rounded bg-slate-100 px-1">frontend/.env</code> and restart{" "}
           <code className="rounded bg-slate-100 px-1">npm run dev</code> (Vite only reads .env on start).
+        </p>
+        <p className="mt-2 text-sm text-slate-600">
+          On Vercel: add them under Project → Settings → Environment Variables, then redeploy.
         </p>
       </div>
     </main>

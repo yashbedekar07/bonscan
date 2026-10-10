@@ -154,6 +154,14 @@ def test_weighed_items_use_price_per_kg():
     assert insights.price_increases(items, TODAY) == []
 
 
+def test_bottle_deposit_is_not_a_price_increase():
+    # "Pfand" 0,25 € for one bottle, then 1,50 € for a six-pack: not a price rise.
+    items = [item("Pfand", "REWE", "2026-09-01", 0.25), item("Pfand", "REWE", "2026-10-01", 1.50)]
+    for row in items:
+        row["categories"] = {"name": "Deposit (Pfand)"}
+    assert insights.price_increases(items, TODAY) == []
+
+
 def test_price_increases_with_empty_data():
     assert insights.price_increases([], TODAY) == []
 

@@ -1,7 +1,10 @@
 """BonScan API entry point.
 
 Run locally with:  uvicorn app.main:app --reload
+Run on Render with: uvicorn app.main:app --host 0.0.0.0 --port $PORT
 """
+
+import logging
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,9 +17,18 @@ from app.routers import analytics, budgets, export, insights
 from app.auth import CurrentUser, get_current_user, get_user_db
 from app.categories import fetch_categories
 from app.config import FRONTEND_ORIGINS, ConfigError, gemini_configured, supabase_configured
+from app.logging_setup import setup_logging
 from app.schemas import Category
 
-app = FastAPI(title="BonScan API", version="0.3.1")
+setup_logging()
+logger = logging.getLogger(__name__)
+
+if not FRONTEND_ORIGINS:
+    logger.warning("FRONTEND_ORIGINS is empty: browsers won't be allowed to call this API (CORS).")
+else:
+    logger.info("CORS allowed origins: %s", ", ".join(FRONTEND_ORIGINS))
+
+app = FastAPI(title="BonScan API", version="0.4.0")
 
 # Allow the frontend to call this API from the browser.
 app.add_middleware(

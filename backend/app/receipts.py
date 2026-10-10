@@ -10,11 +10,12 @@ import logging
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
+from postgrest.exceptions import APIError
 from supabase import Client
 
 from app.auth import CurrentUser, get_current_user, get_user_db
 from app.categories import category_ids_by_name
-from app.config import RECEIPTS_BUCKET
+from app.config import RECEIPTS_BUCKET, SCAN_LIMIT_PER_DAY, ConfigError
 from app.extraction import ExtractionError, extract_receipt, get_gemini_client
 from app.images import MAX_IMAGE_BYTES, ImageError, prepare_image
 from app.schemas import (
@@ -42,6 +43,26 @@ def _signed_url(db: Client, image_path: str) -> str | None:
         return None
 
 
+def _register_scan(db: Client) -> None:
+    """Count one AI scan for the user, or raise 429 if today's limit is reached.
+
+    The counting happens in the database function register_scan (supabase/schema.sql),
+    which users can't bypass by writing to the table themselves.
+    """
+    try:
+        rows = db.rpc("register_scan", {"daily_limit": SCAN_LIMIT_PER_DAY}).execute().data
+    except APIError as error:
+        if error.code == "PGRST202":  # function doesn't exist
+            raise ConfigError("Scan limit not set up: run supabase/schema.sql again in the Supabase SQL Editor.")
+        raise
+    row = rows[0] if isinstance(rows, list) else rows
+    if not row["allowed"]:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            f"Daily scan limit reached ({SCAN_LIMIT_PER_DAY} scans per day). Try again tomorrow.",
+        )
+
+
 @router.post("/extract")
 def extract(
     file: UploadFile = File(..., description="Receipt photo (JPG, PNG or WEBP, max 10 MB)"),
@@ -57,6 +78,10 @@ def extract(
         image = prepare_image(data)
     except ImageError as error:
         raise HTTPException(error.status_code, error.message)
+
+    # Fair use of our Gemini quota: count this scan, or stop here if the daily limit is reached.
+    # (Invalid files above don't count; every scan that reaches the AI does.)
+    _register_scan(db)
 
     # Store the photo in the user's own folder: <user_id>/<uuid>.<ext>
     # (the storage policy only allows uploads into the user's own folder).

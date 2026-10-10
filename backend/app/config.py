@@ -13,12 +13,13 @@ class ConfigError(Exception):
     """A required setting is missing from backend/.env (returned to the client as 503)."""
 
 
-# Comma-separated list of origins allowed to call the API (the React dev server by default).
+# Comma-separated list of website origins allowed to call the API (CORS), e.g.
+# "http://localhost:5173" locally or "https://bonscan.vercel.app" in production.
+# No default on purpose: without it, browsers can't call the API from any site.
+# A trailing "/" is removed, because browsers send origins without one.
 FRONTEND_ORIGINS: list[str] = [
-    origin.strip()
-    for origin in os.getenv(
-        "FRONTEND_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
-    ).split(",")
+    origin.strip().rstrip("/")
+    for origin in os.getenv("FRONTEND_ORIGINS", "").split(",")
     if origin.strip()
 ]
 
@@ -35,6 +36,9 @@ RECEIPTS_BUCKET = "receipts"
 GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "").strip() or "gemini-flash-latest"
 GEMINI_TIMEOUT_SECONDS: int = int(os.getenv("GEMINI_TIMEOUT_SECONDS", "") or "60")
+
+# Fair use of our Gemini quota: receipt scans allowed per user per day (Europe/Berlin day).
+SCAN_LIMIT_PER_DAY: int = max(1, int(os.getenv("SCAN_LIMIT_PER_DAY", "") or "15"))
 
 
 def supabase_configured() -> bool:
