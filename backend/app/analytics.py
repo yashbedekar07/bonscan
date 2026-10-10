@@ -104,6 +104,19 @@ def _unit_price(item: Row) -> float | None:
 # ---------- Calculations ----------
 
 
+def category_totals(items: list[Row], month: str | None = None) -> dict[str, float]:
+    """{category name: amount} for all items (or only those bought in `month`).
+
+    Unlike spending_by_category, nothing is dropped: a category can be 0 or negative.
+    """
+    totals: dict[str, float] = defaultdict(float)
+    for item in items:
+        if month and month_of(item["receipts"]["purchase_date"]) != month:
+            continue
+        totals[_category(item)[0]] += item["total_price"]
+    return {name: _money(amount) for name, amount in totals.items()}
+
+
 def spending_by_category(items: list[Row]) -> list[Row]:
     """Spending per category, biggest first.
 

@@ -5,8 +5,8 @@ Photograph a receipt, and an AI vision model extracts the store, date, items, pr
 Items are categorised automatically, and a dashboard shows spending by category, store and month,
 plus price trends and forecasts.
 
-> Status: receipt scanning (upload → AI extraction → review → save) and the analytics dashboard work.
-> Budgets, forecasts and alerts come in a later step.
+> Status: receipt scanning, analytics dashboard, budgets, forecasts, alerts and CSV export work.
+> Deployment comes in the next step.
 
 ## Stack
 
@@ -104,6 +104,35 @@ npm run dev
 | GET    | `/api/analytics/monthly-trend?months=12` | ✅ | total per month, empty months included |
 | GET    | `/api/analytics/top-items?month=YYYY-MM&limit=10` | ✅ | top items by spend and by count |
 | GET    | `/api/analytics/price-history?item=milch` | ✅ | an item's price over time per store |
+
+| GET    | `/api/budgets` | ✅ | your monthly budgets |
+| PUT    | `/api/budgets/{category_id}` | ✅ | set/update a limit: `{"monthly_limit": 200}` (must be > 0) |
+| DELETE | `/api/budgets/{category_id}` | ✅ | remove a budget |
+| GET    | `/api/budgets/progress?month=YYYY-MM` | ✅ | spent vs limit per budget (ok / warning / over) |
+| GET    | `/api/insights/forecast` | ✅ | end-of-month projection + next-month forecast |
+| GET    | `/api/insights/alerts` | ✅ | plain-language alerts with the numbers behind them |
+| GET    | `/api/export/csv?from=YYYY-MM-DD&to=YYYY-MM-DD` | ✅ | CSV for German Excel (`;`, comma decimals) |
+
+## Forecasts and alerts
+
+Plain Python in `backend/app/services/` (pandas/numpy are blocked by Windows Smart App Control on the dev machine).
+
+- **End-of-month projection:** `spent so far ÷ days passed (incl. today) × days in month`.
+- **Next month:** `0.5 × last month + 0.3 × the month before + 0.2 × the one before`, using complete months only.
+  Months before your first receipt are missing data (weights are rescaled); fewer than 2 months → "not enough data yet".
+- **Category alert:** this month > 130 % of the average of the previous 3 months **and** at least 10 € more.
+- **Budget alert:** ≥ 80 % used (warning), over 100 % (warning), or projected to go over (info).
+- **Price alert:** same item, same store, latest price > 15 % (and ≥ 5 ct) above the previous purchase, within the last 60 days.
+- **CSV export:** text cells starting with `=`, `+`, `-` or `@` get a `'` prefix so Excel never runs them as formulas.
+
+### Running the tests (Windows CMD)
+
+```bat
+cd /d D:\Project\bonscan\backend
+.venv\Scripts\activate.bat
+pip install -r requirements-dev.txt
+python -m pytest -v
+```
 
 ## How the dashboard numbers are calculated
 

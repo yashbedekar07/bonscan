@@ -11,6 +11,9 @@ import StoreBars from "../components/dashboard/StoreBars";
 import TrendChart from "../components/dashboard/TrendChart";
 import TopItemsTable from "../components/dashboard/TopItemsTable";
 import PriceTracker from "../components/dashboard/PriceTracker";
+import ForecastCard from "../components/dashboard/ForecastCard";
+import BudgetProgress from "../components/dashboard/BudgetProgress";
+import InsightsList from "../components/dashboard/InsightsList";
 
 /** Shown when the user hasn't saved any receipts in the last 12 months. */
 function EmptyDashboard() {
@@ -35,10 +38,12 @@ function Dashboard() {
   const [month, setMonth] = useState(currentMonth);
 
   // Data for the selected month (reloaded when the month changes).
-  const [monthData, setMonthData] = useState(null); // {summary, categories, stores, topItems}
+  const [monthData, setMonthData] = useState(null); // {summary, categories, stores, topItems, budgets}
   const [monthLoading, setMonthLoading] = useState(true);
-  // The 12-month trend doesn't depend on the selected month, so it's loaded once.
+  // Trend, forecast and alerts are about "now", not the selected month, so they're loaded once.
   const [trend, setTrend] = useState(null);
+  const [forecast, setForecast] = useState(null);
+  const [alerts, setAlerts] = useState(null);
   const [error, setError] = useState("");
 
   const [selectedItem, setSelectedItem] = useState(null);
@@ -47,6 +52,12 @@ function Dashboard() {
   useEffect(() => {
     apiGet("/api/analytics/monthly-trend?months=12")
       .then(setTrend)
+      .catch((err) => setError(err.message));
+    apiGet("/api/insights/forecast")
+      .then(setForecast)
+      .catch((err) => setError(err.message));
+    apiGet("/api/insights/alerts")
+      .then(setAlerts)
       .catch((err) => setError(err.message));
   }, []);
 
@@ -61,9 +72,10 @@ function Dashboard() {
       apiGet(`/api/analytics/by-category?${query}`),
       apiGet(`/api/analytics/by-store?${query}`),
       apiGet(`/api/analytics/top-items?${query}&limit=10`),
+      apiGet(`/api/budgets/progress?${query}`),
     ])
-      .then(([summary, categories, stores, topItems]) => {
-        if (!cancelled) setMonthData({ summary, categories, stores, topItems });
+      .then(([summary, categories, stores, topItems, budgets]) => {
+        if (!cancelled) setMonthData({ summary, categories, stores, topItems, budgets });
       })
       .catch((err) => !cancelled && setError(err.message))
       .finally(() => !cancelled && setMonthLoading(false));
@@ -104,6 +116,32 @@ function Dashboard() {
       <KpiCards summary={monthData?.summary} loading={monthLoading} />
 
       <div className="grid gap-6 lg:grid-cols-2">
+        <ChartCard title="Forecast" subtitle={formatMonth(currentMonth())}>
+          {forecast ? <ForecastCard forecast={forecast} /> : <Skeleton className="h-40" />}
+        </ChartCard>
+
+        <ChartCard
+          title="Budgets"
+          subtitle={formatMonth(month)}
+          action={
+            <Link to="/budgets" className="text-sm font-medium text-emerald-700 hover:underline">
+              Edit
+            </Link>
+          }
+        >
+          {monthLoading ? (
+            <Skeleton className="h-40" />
+          ) : (
+            <BudgetProgress progress={monthData?.budgets ?? []} isCurrentMonth={month === currentMonth()} />
+          )}
+        </ChartCard>
+      </div>
+
+      <ChartCard title="Insights" subtitle="Things worth a look this month">
+        {alerts ? <InsightsList alerts={alerts} /> : <Skeleton className="h-24" />}
+      </ChartCard>
+
+      <div className="grid gap-6 lg:grid-cols-2">
         <ChartCard title="Spending by category" subtitle={`${formatMonth(month)} · based on item prices`}>
           {monthLoading ? (
             <Skeleton className="h-56" />
@@ -125,9 +163,9 @@ function Dashboard() {
         </ChartCard>
       </div>
 
-      <ChartCard title="Monthly trend" subtitle="Last 12 months · click a month to open it">
+      <ChartCard title="Monthly trend" subtitle="Last 12 months · dashed = projection · click a month to open it">
         {trend ? (
-          <TrendChart trend={trend} selectedMonth={month} onSelectMonth={setMonth} />
+          <TrendChart trend={trend} forecast={forecast} selectedMonth={month} onSelectMonth={setMonth} />
         ) : (
           <Skeleton className="h-64" />
         )}

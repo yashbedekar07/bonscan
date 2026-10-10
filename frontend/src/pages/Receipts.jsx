@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { apiGet } from "../lib/api";
 import { formatDate, formatMoney } from "../lib/format";
 import Alert from "../components/Alert";
+import ExportCsv from "../components/ExportCsv";
 
 function Receipts() {
   const [receipts, setReceipts] = useState([]);
@@ -26,6 +27,10 @@ function Receipts() {
         >
           + Scan receipt
         </Link>
+      </div>
+
+      <div className="mt-6">
+        <ExportCsv />
       </div>
 
       <div className="mt-6">

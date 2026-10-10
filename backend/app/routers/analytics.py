@@ -1,26 +1,23 @@
 """Analytics endpoints for the dashboard.
 
-Data is loaded with the logged-in user's Supabase client, so Row Level
-Security guarantees each user only ever sees their own receipts. The maths
-lives in app/analytics.py.
+Data is loaded with the logged-in user's Supabase client (app/data.py), so Row
+Level Security guarantees each user only ever sees their own receipts. The
+maths lives in app/analytics.py.
 """
 
 from datetime import date
-from typing import Annotated, Any, Callable
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from supabase import Client
 
-from app import analytics
+from app import analytics, data
 from app.auth import get_user_db
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
-# Supabase returns at most 1000 rows per request, so we page through results.
-PAGE_SIZE = 1000
-
-# ?month=YYYY-MM (defaults to the current month)
+# ?month=YYYY-MM (defaults to the current month). Also used by other routers.
 MonthParam = Annotated[
     str | None,
     Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="Month as YYYY-MM (default: current month)"),
@@ -84,54 +81,6 @@ class PriceHistory(BaseModel):
     points: list[PricePoint]
 
 
-# ---------- Data loading ----------
-
-
-def _fetch_all(build_query: Callable[[], Any]) -> list[dict]:
-    """Run a query page by page until all rows are loaded."""
-    rows: list[dict] = []
-    start = 0
-    while True:
-        page = build_query().range(start, start + PAGE_SIZE - 1).execute().data
-        rows.extend(page)
-        if len(page) < PAGE_SIZE:
-            return rows
-        start += PAGE_SIZE
-
-
-def _receipts(db: Client, first_month: str, last_month: str) -> list[dict]:
-    """The user's receipts from the start of first_month to the end of last_month."""
-    start = analytics.month_start(first_month).isoformat()
-    end = analytics.month_start(analytics.shift_month(last_month, 1)).isoformat()
-    return _fetch_all(
-        lambda: db.table("receipts")
-        .select("id, store_name, purchase_date, total_amount")
-        .gte("purchase_date", start)
-        .lt("purchase_date", end)
-        .order("id")
-    )
-
-
-_ITEM_COLUMNS = (
-    "name, quantity, unit_price, total_price, categories(name, icon), "
-    # !inner lets us filter items by their receipt's date.
-    "receipts!inner(store_name, purchase_date)"
-)
-
-
-def _items(db: Client, month: str) -> list[dict]:
-    """The user's receipt items bought in one month."""
-    start = analytics.month_start(month).isoformat()
-    end = analytics.month_start(analytics.shift_month(month, 1)).isoformat()
-    return _fetch_all(
-        lambda: db.table("receipt_items")
-        .select(_ITEM_COLUMNS)
-        .gte("receipts.purchase_date", start)
-        .lt("receipts.purchase_date", end)
-        .order("id")
-    )
-
-
 # ---------- Endpoints ----------
 
 
@@ -142,25 +91,29 @@ def summary(month: MonthParam = None, db: Client = Depends(get_user_db)) -> Summ
     month = month or analytics.current_month()
     previous = analytics.shift_month(month, -1)
 
-    receipts = _receipts(db, previous, month)  # both months in one query
+    receipts = data.receipts_between(db, previous, month)  # both months in one query
     month_receipts = [r for r in receipts if analytics.month_of(r["purchase_date"]) == month]
     previous_receipts = [r for r in receipts if analytics.month_of(r["purchase_date"]) == previous]
 
-    return Summary(**analytics.summarize(month, month_receipts, previous_receipts, _items(db, month)))
+    return Summary(
+        **analytics.summarize(month, month_receipts, previous_receipts, data.items_between(db, month, month))
+    )
 
 
 @router.get("/by-category")
 def by_category(month: MonthParam = None, db: Client = Depends(get_user_db)) -> list[CategorySpend]:
     """Spending per category in a month (amount and % of the month's category total)."""
     month = month or analytics.current_month()
-    return [CategorySpend(**row) for row in analytics.spending_by_category(_items(db, month))]
+    rows = analytics.spending_by_category(data.items_between(db, month, month))
+    return [CategorySpend(**row) for row in rows]
 
 
 @router.get("/by-store")
 def by_store(month: MonthParam = None, db: Client = Depends(get_user_db)) -> list[StoreSpend]:
     """Spending and number of visits per store in a month."""
     month = month or analytics.current_month()
-    return [StoreSpend(**row) for row in analytics.spending_by_store(_receipts(db, month, month))]
+    rows = analytics.spending_by_store(data.receipts_between(db, month, month))
+    return [StoreSpend(**row) for row in rows]
 
 
 @router.get("/monthly-trend")
@@ -171,7 +124,7 @@ def monthly_trend(
     """Total spent per month for the last N months (months without receipts show 0)."""
     last = analytics.current_month()
     first = analytics.shift_month(last, -(months - 1))
-    rows = analytics.monthly_trend(_receipts(db, first, last), last, months)
+    rows = analytics.monthly_trend(data.receipts_between(db, first, last), last, months)
     return [MonthTotal(**row) for row in rows]
 
 
@@ -183,7 +136,7 @@ def top_items(
 ) -> TopItems:
     """Most-bought items in a month, by money spent and by number of purchases."""
     month = month or analytics.current_month()
-    return TopItems(**analytics.top_items(_items(db, month), limit))
+    return TopItems(**analytics.top_items(data.items_between(db, month, month), limit))
 
 
 @router.get("/price-history")
@@ -199,10 +152,7 @@ def price_history(
     # Let the database pre-filter on the longest word (letters only, so it's safe in a LIKE pattern);
     # the exact whole-word matching happens in analytics.price_history.
     longest = max(words, key=len)
-    rows = _fetch_all(
-        lambda: db.table("receipt_items")
-        .select(_ITEM_COLUMNS)
-        .ilike("name", f"%{longest}%")
-        .order("id")
+    rows = data.fetch_all(
+        lambda: db.table("receipt_items").select(data.ITEM_COLUMNS).ilike("name", f"%{longest}%").order("id")
     )
     return PriceHistory(**analytics.price_history(rows, item))

@@ -9,6 +9,7 @@ import ScanReceipt from "./pages/ScanReceipt";
 import ReviewReceipt from "./pages/ReviewReceipt";
 import Receipts from "./pages/Receipts";
 import ReceiptDetail from "./pages/ReceiptDetail";
+import Budgets from "./pages/Budgets";
 
 function App() {
   return (
@@ -31,6 +32,7 @@ function App() {
             <Route path="/scan/review" element={<ReviewReceipt />} />
             <Route path="/receipts" element={<Receipts />} />
             <Route path="/receipts/:id" element={<ReceiptDetail />} />
+            <Route path="/budgets" element={<Budgets />} />
           </Route>
 
           {/* Anything else (including "/") goes to the dashboard,

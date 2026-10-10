@@ -21,7 +21,7 @@ function errorMessage(body, status) {
  * Sends the Supabase access token as "Authorization: Bearer <token>".
  * Throws an Error with a user-friendly message if the request fails.
  */
-async function request(path, { method = "GET", json, formData } = {}) {
+async function request(path, { method = "GET", json, formData, asBlob = false } = {}) {
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -54,12 +54,25 @@ async function request(path, { method = "GET", json, formData } = {}) {
     throw new Error(errorMessage(errorBody, res.status));
   }
 
-  return res.status === 204 ? null : res.json();
+  if (res.status === 204) return null;
+  return asBlob ? res.blob() : res.json();
 }
 
 export const apiGet = (path) => request(path);
 export const apiPost = (path, json) => request(path, { method: "POST", json });
+export const apiPut = (path, json) => request(path, { method: "PUT", json });
 export const apiDelete = (path) => request(path, { method: "DELETE" });
+
+/** Download a file from the backend (with the login token) and save it as `filename`. */
+export async function apiDownload(path, filename) {
+  const blob = await request(path, { asBlob: true });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 /** Upload a single file as multipart form data (field name "file"). */
 export function apiUpload(path, file) {

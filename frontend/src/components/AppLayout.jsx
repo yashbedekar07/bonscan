@@ -5,6 +5,7 @@ const NAV_ITEMS = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/scan", label: "Scan receipt" },
   { to: "/receipts", label: "My receipts" },
+  { to: "/budgets", label: "Budgets" },
 ];
 
 /** Header with navigation, shown on every page for logged-in users. */
@@ -17,7 +18,8 @@ function AppLayout() {
         <div className="mx-auto max-w-6xl flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
           <span className="text-2xl font-bold text-emerald-600">BonScan</span>
 
-          <nav className="order-last flex w-full gap-1 sm:order-none sm:w-auto">
+          {/* On phones the links scroll sideways instead of overflowing the page. */}
+          <nav className="order-last -mx-1 flex w-full gap-1 overflow-x-auto whitespace-nowrap px-1 sm:order-none sm:w-auto">
             {NAV_ITEMS.map((item) => (
               <NavLink
                 key={item.to}
