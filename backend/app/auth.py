@@ -1,16 +1,18 @@
-"""Authentication dependency for protected endpoints.
+"""Authentication dependencies for protected endpoints.
 
 Usage:
     @app.get("/api/something")
-    def something(user: CurrentUser = Depends(get_current_user)) -> ...:
-        ...
+    def something(db: Client = Depends(get_user_db)) -> ...:
+        ...  # db acts as the logged-in user (Row Level Security applies)
 """
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
+from supabase import Client
 
-from app.supabase_client import get_supabase
+from app.config import ConfigError
+from app.supabase_client import get_supabase, user_client
 
 # Reads the "Authorization: Bearer <token>" header. auto_error=False lets us
 # return our own 401 (FastAPI's default for a missing header is 403).
@@ -22,7 +24,7 @@ class CurrentUser(BaseModel):
 
     id: str
     email: str | None
-    access_token: str  # kept so later endpoints can act on the user's behalf
+    access_token: str  # used to talk to Supabase on the user's behalf; never logged
 
 
 def _unauthorized(detail: str) -> HTTPException:
@@ -45,7 +47,7 @@ def get_current_user(
         # Asks Supabase Auth to validate the token. This also rejects tokens
         # of users who have logged out or been deleted.
         response = get_supabase().auth.get_user(token)
-    except RuntimeError:
+    except ConfigError:
         raise  # Supabase not configured: a server problem, not the user's fault
     except Exception:
         raise _unauthorized("Invalid or expired token")
@@ -54,3 +56,8 @@ def get_current_user(
         raise _unauthorized("Invalid or expired token")
 
     return CurrentUser(id=response.user.id, email=response.user.email, access_token=token)
+
+
+def get_user_db(user: CurrentUser = Depends(get_current_user)) -> Client:
+    """Supabase client acting as the logged-in user."""
+    return user_client(user.access_token)

@@ -3,15 +3,19 @@
 Run locally with:  uvicorn app.main:app --reload
 """
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from supabase import Client
 
-from app.auth import CurrentUser, get_current_user
-from app.config import FRONTEND_ORIGINS
-from app.supabase_client import get_supabase
+from app import receipts
+from app.auth import CurrentUser, get_current_user, get_user_db
+from app.categories import fetch_categories
+from app.config import FRONTEND_ORIGINS, ConfigError, gemini_configured, supabase_configured
+from app.schemas import Category
 
-app = FastAPI(title="BonScan API", version="0.2.0")
+app = FastAPI(title="BonScan API", version="0.3.1")
 
 # Allow the frontend to call this API from the browser.
 app.add_middleware(
@@ -23,7 +27,21 @@ app.add_middleware(
 )
 
 
-# ---------- Response models (also shown in the /docs page) ----------
+@app.exception_handler(ConfigError)
+def config_error_handler(_request: Request, error: ConfigError) -> JSONResponse:
+    """Missing settings → a clear 503 the frontend can show, instead of a crash."""
+    return JSONResponse(status_code=503, content={"detail": str(error)})
+
+
+# Receipt endpoints live in app/receipts.py.
+app.include_router(receipts.router)
+
+
+class HealthResponse(BaseModel):
+    status: str
+    app: str
+    supabase_configured: bool
+    gemini_configured: bool
 
 
 class MeResponse(BaseModel):
@@ -31,19 +49,15 @@ class MeResponse(BaseModel):
     email: str | None
 
 
-class Category(BaseModel):
-    id: int
-    name: str
-    icon: str | None
-
-
-# ---------- Endpoints ----------
-
-
 @app.get("/api/health")
-def health() -> dict[str, str]:
-    """Simple liveness check used by the frontend to confirm the API is up."""
-    return {"status": "ok", "app": "BonScan"}
+def health() -> HealthResponse:
+    """Liveness check for the frontend; also says whether backend/.env is complete."""
+    return HealthResponse(
+        status="ok",
+        app="BonScan",
+        supabase_configured=supabase_configured(),
+        gemini_configured=gemini_configured(),
+    )
 
 
 @app.get("/api/me")
@@ -53,13 +67,6 @@ def me(user: CurrentUser = Depends(get_current_user)) -> MeResponse:
 
 
 @app.get("/api/categories")
-def list_categories(_user: CurrentUser = Depends(get_current_user)) -> list[Category]:
+def list_categories(db: Client = Depends(get_user_db)) -> list[Category]:
     """Return all spending categories (shared by every user)."""
-    result = (
-        get_supabase()
-        .table("categories")
-        .select("id, name, icon")
-        .order("id")
-        .execute()
-    )
-    return [Category(**row) for row in result.data]
+    return [Category(**row) for row in fetch_categories(db)]

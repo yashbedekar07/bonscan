@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+# --- Private test data (real receipts) ---
+backend/test_receipts/
+
 # --- Python ---
 __pycache__/
 *.py[cod]

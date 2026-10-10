@@ -167,3 +167,14 @@ create policy "Users read receipts in their own folder"
         bucket_id = 'receipts'
         and (storage.foldername(name))[1] = (select auth.uid())::text
     );
+
+-- Needed when a receipt (or a failed scan) is deleted: the backend removes the
+-- photo while acting as the user, so the user must be allowed to delete it.
+drop policy if exists "Users delete receipts in their own folder" on storage.objects;
+create policy "Users delete receipts in their own folder"
+    on storage.objects for delete
+    to authenticated
+    using (
+        bucket_id = 'receipts'
+        and (storage.foldername(name))[1] = (select auth.uid())::text
+    );

@@ -3,32 +3,67 @@ import { supabase } from "./supabase";
 // Base URL of the FastAPI backend.
 export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
+/** Turn a FastAPI error body into one readable sentence. */
+function errorMessage(body, status) {
+  const detail = body?.detail;
+  if (typeof detail === "string") return detail;
+  // Validation errors (422) are a list like [{loc: ["body", "store_name"], msg: "..."}].
+  if (Array.isArray(detail)) {
+    return detail
+      .map((d) => `${d.loc.filter((part) => part !== "body").join(" → ")}: ${d.msg}`)
+      .join("; ");
+  }
+  return `Request failed (${status})`;
+}
+
 /**
- * GET a backend endpoint as the logged-in user.
+ * Call the backend as the logged-in user.
  * Sends the Supabase access token as "Authorization: Bearer <token>".
- * Throws an Error with the backend's message if the request fails.
+ * Throws an Error with a user-friendly message if the request fails.
  */
-export async function apiGet(path) {
+async function request(path, { method = "GET", json, formData } = {}) {
   const {
     data: { session },
   } = await supabase.auth.getSession();
 
-  const headers = session
-    ? { Authorization: `Bearer ${session.access_token}` }
-    : {};
+  const headers = {};
+  if (session) headers.Authorization = `Bearer ${session.access_token}`;
 
-  const res = await fetch(`${API_URL}${path}`, { headers });
-
-  if (!res.ok) {
-    // FastAPI errors look like {"detail": "..."}.
-    let detail = null;
-    try {
-      detail = (await res.json()).detail;
-    } catch {
-      // Response wasn't JSON; fall back to the status code below.
-    }
-    throw new Error(detail || `Request failed (${res.status})`);
+  let body;
+  if (json !== undefined) {
+    headers["Content-Type"] = "application/json";
+    body = JSON.stringify(json);
+  } else if (formData) {
+    body = formData; // the browser sets the multipart Content-Type itself
   }
 
-  return res.json();
+  let res;
+  try {
+    res = await fetch(`${API_URL}${path}`, { method, headers, body });
+  } catch {
+    throw new Error("Can't reach the server. Is the backend running?");
+  }
+
+  if (!res.ok) {
+    let errorBody = null;
+    try {
+      errorBody = await res.json();
+    } catch {
+      // Response wasn't JSON; errorMessage falls back to the status code.
+    }
+    throw new Error(errorMessage(errorBody, res.status));
+  }
+
+  return res.status === 204 ? null : res.json();
+}
+
+export const apiGet = (path) => request(path);
+export const apiPost = (path, json) => request(path, { method: "POST", json });
+export const apiDelete = (path) => request(path, { method: "DELETE" });
+
+/** Upload a single file as multipart form data (field name "file"). */
+export function apiUpload(path, file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return request(path, { method: "POST", formData });
 }

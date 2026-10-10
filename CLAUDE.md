@@ -18,3 +18,12 @@ dashboard shows spending by category, store and month, plus price trends and for
 - Secrets go in .env files only, never in code. Keep .env.example files up to date.
 - Use type hints in Python and functional components with hooks in React.
 - After each change, tell me exactly how to run and test it.
+- Never bypass, disable or work around any security or restriction: Windows security
+  (Smart App Control, Defender, UAC, firewall), antivirus, file permissions, SSL/TLS
+  certificate checks, API rate limits, free-tier limits, or any service's terms of use.
+- If something is blocked, stop immediately. Explain what was blocked and why, and
+  suggest an allowed alternative. Never change system or security settings yourself.
+- Only use official APIs and SDKs. No scraping, no unofficial or reverse-engineered access.
+- Never run commands with administrator rights unless I explicitly ask.
+- Never put secrets (API keys, passwords, tokens) in code, logs or commits; only in .env files.
+- Before installing any new package, tell me what it is and why it is needed.
