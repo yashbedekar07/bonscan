@@ -3,23 +3,15 @@
 Run locally with:  uvicorn app.main:app --reload
 """
 
-import os
-
-from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
-# Load variables from backend/.env (if present) into the environment.
-load_dotenv()
+from app.auth import CurrentUser, get_current_user
+from app.config import FRONTEND_ORIGINS
+from app.supabase_client import get_supabase
 
-# Comma-separated list of origins allowed to call the API (the React dev server by default).
-FRONTEND_ORIGINS: list[str] = [
-    origin.strip()
-    for origin in os.getenv("FRONTEND_ORIGINS", "http://localhost:5173").split(",")
-    if origin.strip()
-]
-
-app = FastAPI(title="BonScan API", version="0.1.0")
+app = FastAPI(title="BonScan API", version="0.2.0")
 
 # Allow the frontend to call this API from the browser.
 app.add_middleware(
@@ -31,7 +23,43 @@ app.add_middleware(
 )
 
 
+# ---------- Response models (also shown in the /docs page) ----------
+
+
+class MeResponse(BaseModel):
+    id: str
+    email: str | None
+
+
+class Category(BaseModel):
+    id: int
+    name: str
+    icon: str | None
+
+
+# ---------- Endpoints ----------
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     """Simple liveness check used by the frontend to confirm the API is up."""
     return {"status": "ok", "app": "BonScan"}
+
+
+@app.get("/api/me")
+def me(user: CurrentUser = Depends(get_current_user)) -> MeResponse:
+    """Return the logged-in user's id and email."""
+    return MeResponse(id=user.id, email=user.email)
+
+
+@app.get("/api/categories")
+def list_categories(_user: CurrentUser = Depends(get_current_user)) -> list[Category]:
+    """Return all spending categories (shared by every user)."""
+    result = (
+        get_supabase()
+        .table("categories")
+        .select("id, name, icon")
+        .order("id")
+        .execute()
+    )
+    return [Category(**row) for row in result.data]
