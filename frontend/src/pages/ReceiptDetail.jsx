@@ -63,8 +63,15 @@ function ReceiptDetail() {
               <a href={receipt.image_url} target="_blank" rel="noreferrer" title="Open full size">
                 <img src={receipt.image_url} alt="Receipt" className="mx-auto max-h-[80vh] object-contain" />
               </a>
+            ) : receipt.has_image ? (
+              <p className="p-6 text-center text-slate-500">The photo couldn't be loaded. Please reload the page.</p>
             ) : (
-              <p className="p-6 text-center text-slate-500">No image saved.</p>
+              // Receipts without a photo, e.g. the generated demo data.
+              <div className="flex flex-col items-center gap-2 px-6 py-12 text-center text-slate-500">
+                <span className="text-4xl" aria-hidden="true">🧾</span>
+                <p className="font-medium text-slate-600">No image (demo data)</p>
+                <p className="text-sm">This receipt was saved without a photo.</p>
+              </div>
             )}
           </div>
         </div>

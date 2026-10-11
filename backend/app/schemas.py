@@ -100,5 +100,6 @@ class ReceiptDetail(BaseModel):
     vat_amount: float | None
     currency: str
     created_at: datetime
-    image_url: str | None  # short-lived signed URL, None if no image
+    has_image: bool  # False for receipts saved without a photo (e.g. demo data)
+    image_url: str | None  # short-lived signed URL; None if there's no image or it couldn't be signed
     items: list[ReceiptItemOut]

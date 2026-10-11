@@ -118,12 +118,12 @@ cd /d D:\Project\bonscan\backend
 .venv\Scripts\activate.bat
 python -m pytest -v
 python scripts\test_extract.py
-python scripts\seed_demo.py --user-id <uuid> --dry-run
+python scripts\seed_demo.py --dry-run
 ```
 
 - `test_extract.py` reads every photo in `backend/test_receipts/` (git-ignored, real receipts are private)
   and prints the AI result, pausing between calls to respect the Gemini free tier.
-- `seed_demo.py` fills **one demo account** with ~3 months of fake receipts (see [Demo account](#demo-account)).
+- `seed_demo.py` fills the **demo account** with ~4 months of fake receipts (see [Demo account](#demo-account)).
 
 ## Deploy (Render + Vercel + Supabase)
 
@@ -166,14 +166,29 @@ work on refresh.
 
 ### Demo account
 
-1. Sign up in the deployed app with a dedicated demo email, and copy its user id from
-   **Supabase → Authentication → Users**.
-2. In your **local** `backend/.env`, set `DEMO_EMAIL` and `DEMO_PASSWORD` (never on Render).
-3. Run `python scripts\seed_demo.py --user-id <uuid> --dry-run` to preview, then without `--dry-run`
-   to insert. Use `--replace` to refresh the data later (it only deletes receipts it created itself).
+The demo account is `demo@bonscan.app` (created through the app's Sign up page).
+`backend/scripts/seed_demo.py` resets it with ~4 months of made-up receipts (REWE, Lidl, ALDI SÜD, Edeka,
+dm, Rossmann, a bakery, DB and a pizza/döner place) plus 3 budgets, built so that the dashboard shows a
+price increase, an "Eating Out" spending alert and a budget over 80 %.
 
-The script logs in **as the demo user** (no service key), so Row Level Security makes it impossible to
-write anyone else's data, and it refuses to run if the login doesn't match `--user-id`.
+```bat
+cd /d D:\Project\bonscan\backend
+.venv\Scripts\activate.bat
+python scripts\seed_demo.py --dry-run
+python scripts\seed_demo.py
+python scripts\seed_demo.py --verify
+```
+
+- `--dry-run` previews the data and the alerts it will cause, without logging in.
+- Without options it asks for the demo password, **deletes all of the demo account's receipts and budgets**
+  and inserts the new data (running it twice never creates duplicates). The data is the same on every run
+  (fixed random seed); dates move with today.
+- `--verify` only logs in and prints the numbers the API returns (start the backend first, or pass
+  `--api-url https://<your-service>.onrender.com`).
+
+Security: only the anon key is used, never the service key. The password is typed in at runtime and never
+shown, stored or committed. The script logs in **as the demo user**, so Row Level Security makes it impossible
+to touch anyone else's data, and it refuses to run for any account other than `demo@bonscan.app`.
 
 ## Security & privacy
 
@@ -248,7 +263,9 @@ Interactive docs: `/docs` on the running backend.
 ## Known limitations
 
 - The free Render instance sleeps after ~15 minutes without traffic (first request then takes up to a minute).
-- Forecasts are deliberately simple and explainable, not machine learning.
+- Forecasts are deliberately simple and explainable, not machine learning. The end-of-month projection
+  assumes an even daily pace, so a big payment early in the month (e.g. a monthly ticket on the 1st)
+  makes it look high.
 - HEIC files are rejected on the server; phones upload JPEG instead.
 - Calculations use plain Python instead of pandas, because pandas' native libraries were blocked by Windows
   Smart App Control on the development machine.

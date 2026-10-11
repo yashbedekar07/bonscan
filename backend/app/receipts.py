@@ -229,6 +229,8 @@ def get_receipt(receipt_id: UUID, db: Client = Depends(get_user_db)) -> ReceiptD
         vat_amount=row["vat_amount"],
         currency=row["currency"],
         created_at=row["created_at"],
+        has_image=bool(row["image_path"]),
+        # No storage call at all when there's no image (demo data).
         image_url=_signed_url(db, row["image_path"]) if row["image_path"] else None,
         items=items,
     )
